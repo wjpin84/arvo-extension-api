@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wjpin84/arvo-extension-api/blob/main/manifest.schema.json",
+  "title": "arvo-extension.json",
+  "description": "What an Arvo extension declares about itself. Everything under `contributes` is optional; an extension may contribute several kinds at once.",
+  "type": "object",
+  "required": ["id"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "The extension's own name, and the folder it installs into. Namespaces everything it contributes, so two packs may both ship a theme called `midnight`.",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "name": { "type": "string", "description": "What to call it in a list. Falls back to the id." },
+    "version": { "type": "string", "description": "The extension's own version, shown in the Extensions view." },
+    "description": { "type": "string" },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "themes": { "type": "array", "items": { "$ref": "#/$defs/theme" } },
+        "strategies": { "type": "array", "items": { "$ref": "#/$defs/strategy" } },
+        "providers": { "type": "array", "items": { "$ref": "#/$defs/provider" } },
+        "webviews": {
+          "type": "array",
+          "description": "Declared so an extension that ships one is recognised and refused rather than silently installed as if it were data. No third-party code runs in Arvo's window.",
+          "items": { "type": "object" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "theme": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "base": {
+          "enum": ["dark", "light"],
+          "default": "dark",
+          "description": "The built-in palette this one starts from, so a theme that names six colours still has the other forty."
+        },
+        "colors": {
+          "type": "object",
+          "description": "CSS custom properties by their own names. A property Arvo does not know, or a value that is not a colour, is dropped.",
+          "propertyNames": { "pattern": "^--[a-z0-9-]+$" },
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+
+    "interval": {
+      "type": "object",
+      "description": "A bar's resolution: a count of some unit.",
+      "required": ["step", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "step": { "type": "integer", "minimum": 1 },
+        "unit": { "enum": ["second", "minute", "hour", "day", "week"] }
+      }
+    },
+
+    "strategy": {
+      "type": "object",
+      "description": "A strategy as data: a kind, and that kind's parameters.",
+      "required": ["name", "interval", "kind"],
+      "properties": {
+        "name": { "type": "string", "description": "Namespaced by the extension in the picker: `their-catalog.fast-cross`." },
+        "label": { "type": "string" },
+        "premise": { "type": "string", "description": "One line on what it trades. A name is not a description." },
+        "interval": { "$ref": "#/$defs/interval" },
+        "kind": { "enum": ["grid", "rules"] }
+      },
+      "oneOf": [{ "$ref": "#/$defs/grid" }, { "$ref": "#/$defs/rules" }]
+    },
+
+    "grid": {
+      "type": "object",
+      "description": "A rule Arvo implements, searched over parameters you choose. It cannot contribute a rule.",
+      "required": ["kind", "rule"],
+      "properties": {
+        "kind": { "const": "grid" },
+        "rule": {
+          "type": "string",
+          "description": "The rule Arvo knows by this name. One it does not have is refused when the manifest is read, with the list of what it does have."
+        },
+        "fixed": {
+          "type": "object",
+          "description": "Parameters every trial shares. The rule's own are inherited; these override the ones named.",
+          "additionalProperties": { "type": "number" }
+        },
+        "axes": {
+          "type": "object",
+          "description": "What the search varies, and over what values. An axis with no values searches nothing and is refused.",
+          "additionalProperties": { "type": "array", "items": { "type": "number" }, "minItems": 1 }
+        }
+      }
+    },
+
+    "rules": {
+      "type": "object",
+      "description": "Thresholds over named signals. Arvo reads one; it has no runner for one yet.",
+      "required": ["kind", "entry"],
+      "properties": {
+        "kind": { "const": "rules" },
+        "entry": { "$ref": "#/$defs/ruleSet" },
+        "exit": { "$ref": "#/$defs/ruleSet" }
+      }
+    },
+
+    "ruleSet": {
+      "type": "object",
+      "description": "An empty set never holds, in either direction: all-of over nothing is vacuously true in logic and would mean `enter on every bar` here.",
+      "additionalProperties": false,
+      "properties": {
+        "combine": { "enum": ["all", "any"], "default": "all" },
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/rule" } }
+      }
+    },
+
+    "rule": {
+      "type": "object",
+      "description": "One threshold over one named signal. Both bounds absent asks only whether the signal is known. A rule over an absent value is false.",
+      "required": ["signal"],
+      "additionalProperties": false,
+      "properties": {
+        "signal": {
+          "type": "string",
+          "description": "An open, dotted namespace: `arvo.sma.20`, `regime.trend`.",
+          "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+        },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "min_exclusive": { "type": "boolean", "default": false },
+        "max_exclusive": { "type": "boolean", "default": false }
+      }
+    },
+
+    "provider": {
+      "type": "object",
+      "description": "A process Arvo starts, speaking gRPC over loopback. See PROTOCOL.md.",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "services": {
+          "type": "array",
+          "description": "The gRPC services it serves. `arvo.source.v1.Source` is the one that exists.",
+          "items": { "type": "string" }
+        },
+        "build": {
+          "type": "string",
+          "description": "How to build it, as argv split on whitespace. No shell runs it."
+        },
+        "run": {
+          "type": "string",
+          "description": "What to run: a path to the file the build produced, or a command to run in the checkout."
+        },
+        "assets": {
+          "type": "array",
+          "description": "Prebuilt binaries, one per platform, for a machine with no toolchain. When every provider offers one for the running platform, Arvo downloads instead of building.",
+          "items": { "$ref": "#/$defs/asset" }
+        }
+      }
+    },
+
+    "asset": {
+      "type": "object",
+      "required": ["target", "url", "sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "The target triple it was built for: `x86_64-pc-windows-msvc`.",
+          "examples": [
+            "x86_64-pc-windows-msvc",
+            "x86_64-unknown-linux-gnu",
+            "aarch64-apple-darwin",
+            "x86_64-apple-darwin"
+          ]
+        },
+        "url": { "type": "string", "format": "uri" },
+        "sha256": {
+          "type": "string",
+          "description": "Checked before the file is written. This is an executable Arvo will run with the person's privileges.",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

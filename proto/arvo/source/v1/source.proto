@@ -1,0 +1,182 @@
+syntax = "proto3";
+
+// A data source served by a plugin process (ADR-0022).
+//
+// Mirrors `arvo_data::source::Source` method for method: what a source is
+// (Describe), whether it can fetch right now (Connected), and the four
+// fetches. One process may serve several sources -- Yahoo serves its
+// split-adjusted and total-return venues as two -- so every call after
+// Describe names the source by id.
+//
+// Errors cross as gRPC status codes, one per `SourceError` variant; the host
+// rebuilds the variant from the code plus what it already knows it asked for.
+// See `arvo_plugin_host::source` for the mapping in both directions.
+//
+// Credentials never cross whole (ADR-0022 point 4). Each call carries a
+// Grant: what this one call may use, read from the host's keychain and sent
+// with the request. A plugin uses it for that call and holds nothing.
+package arvo.source.v1;
+
+message Empty {}
+
+// What one call may use. A source needing no credential ignores it; one
+// that needs a key pair reads `key_id` and `secret`; one behind a sign-in
+// reads `bearer`, which is never the refresh token. A call that arrives
+// without the grant its source needs is a call with no session, whatever
+// the plugin's own machine might hold.
+message Grant {
+  string key_id = 1;
+  string secret = 2;
+  string bearer = 3;
+}
+
+// How a source is authorised. `arvo_data::source::Credential`.
+enum Credential {
+  CREDENTIAL_NONE = 0;
+  CREDENTIAL_SIGN_IN = 1;
+  CREDENTIAL_KEYS = 2;
+}
+
+// What corporate actions the prices are adjusted for.
+// `arvo_data::source::Adjustment`.
+enum Adjustment {
+  ADJUSTMENT_SPLIT = 0;
+  ADJUSTMENT_TOTAL_RETURN = 1;
+}
+
+// What the prices actually are. `single_venue` names the one venue whose
+// prints these are; unset means the consolidated tape.
+message Basis {
+  Adjustment adjustment = 1;
+  optional string single_venue = 2;
+}
+
+// The widest window one fetch at `interval` may ask for, in calendar days.
+// `interval` is spelled as `arvo_data::BarInterval` spells it: `5minute`,
+// `1day`. An interval with no limit listed has none the source will refuse over.
+message WindowLimit {
+  string interval = 1;
+  uint32 days = 2;
+}
+
+// One source, as `arvo_data::source::Source` describes itself.
+message Description {
+  string id = 1;
+  string label = 2;
+  string venue = 3;
+  Credential credential = 4;
+  // Empty means "derive from the id", as the trait's default does.
+  string vendor = 5;
+  // Empty means "the label", as the trait's default does.
+  string vendor_label = 6;
+  repeated string provides = 7;
+  // Required. A source that does not declare its basis is refused on the
+  // host, for the reason the trait gives it no default.
+  Basis basis = 8;
+  repeated WindowLimit limits = 9;
+}
+
+message Descriptions {
+  repeated Description sources = 1;
+}
+
+message SourceId {
+  string id = 1;
+  optional Grant grant = 2;
+}
+
+message ConnectedReply {
+  bool connected = 1;
+}
+
+message BarsRequest {
+  string id = 1;
+  string symbol = 2;
+  string interval = 3;
+  // YYYY-MM-DD, inclusive.
+  string from = 4;
+  string to = 5;
+  optional Grant grant = 6;
+}
+
+// One bar. `at` is when the bar opens, `YYYY-MM-DDTHH:MM:SS`, no zone:
+// `arvo_data::Bar` is a naive time and the plugin answers in the same terms.
+message Bar {
+  string at = 1;
+  double open = 2;
+  double high = 3;
+  double low = 4;
+  double close = 5;
+  double volume = 6;
+}
+
+message BarsReply {
+  repeated Bar bars = 1;
+  // Gap-fill bars the vendor synthesised and the source dropped.
+  uint32 interpolated = 2;
+}
+
+message DividendsRequest {
+  string id = 1;
+  string symbol = 2;
+  string from = 3;
+  string to = 4;
+  optional Grant grant = 5;
+}
+
+message Dividend {
+  string ex_date = 1;
+  double amount = 2;
+}
+
+message DividendsReply {
+  repeated Dividend dividends = 1;
+}
+
+message SearchRequest {
+  string id = 1;
+  // The host's data library, so a match already held can be filed under the
+  // venue it is already under. A path, because a plugin is a local process
+  // (ADR-0007) and the trait takes one.
+  string library_root = 2;
+  string query = 3;
+  uint32 limit = 4;
+  optional Grant grant = 5;
+}
+
+message Match {
+  string instrument = 1;
+  string symbol = 2;
+  string name = 3;
+  optional double price = 4;
+  optional double change = 5;
+}
+
+message Matches {
+  repeated Match matches = 1;
+}
+
+message QuotesRequest {
+  string id = 1;
+  repeated string instruments = 2;
+  optional Grant grant = 3;
+}
+
+message Quote {
+  string instrument = 1;
+  double price = 2;
+  optional double change = 3;
+}
+
+message QuotesReply {
+  repeated Quote quotes = 1;
+}
+
+service Source {
+  rpc Describe(Empty) returns (Descriptions);
+  rpc Connected(SourceId) returns (ConnectedReply);
+  rpc Bars(BarsRequest) returns (BarsReply);
+  rpc Dividends(DividendsRequest) returns (DividendsReply);
+  rpc Search(SearchRequest) returns (Matches);
+  rpc Quotes(QuotesRequest) returns (QuotesReply);
+}
