@@ -33,6 +33,21 @@ fine — but the line must arrive, or Arvo has nothing to connect to.
 Bind *before* printing. A port announced before it is listening is a race
 that fails only sometimes, which is worse than failing always.
 
+## What you serve
+
+Two services, at the address you announced:
+
+| Service | Why |
+| --- | --- |
+| `arvo.plugin.v1.Plugin` | `GetManifest`, how Arvo learns what you are and what you can do |
+| whatever you named in the manifest | the work itself |
+
+`GetManifest` answers with an id, a name, a version, and a **capability per
+service you serve**, named exactly as the service is named:
+`arvo.source.v1.Source`, `arvo.signal.v1.Signals`. Arvo asks nothing of a
+service you did not claim, so a capability you omit is a capability you do
+not have.
+
 ## The token
 
 The port is loopback, and anything else on the machine could still connect to
@@ -82,6 +97,38 @@ on.
 Arvo stops what it started: when the extension is disabled, when it is
 removed, and when Arvo quits. Handle termination by exiting; there is no
 shutdown call, and nothing is asked of you on the way out.
+
+## Publishing signals
+
+A provider naming `arvo.signal.v1.Signals` publishes named values that may be
+absent — a regime classifier is the first one, publishing labels rather than
+numbers.
+
+`Describe` says what you publish: a name in the open dotted namespace, a line
+about what it means, whether it is **causal**, and what computes it.
+
+Causal means each value was computed from data available at that instant. It
+is your claim to make, and it decides what a study may do with the series:
+gate a backtest on a causal signal, describe a result with a descriptive one.
+A label computed over a whole window after the fact is look-ahead of the most
+flattering kind, so if that is what yours is, say `causal: false` and say why
+in `because`. That sentence is what Arvo shows the person whose backtest it
+refuses.
+
+`Latest` says what you think right now, and this is where the invariant
+lives:
+
+- **A value you do not have is absent.** Send the point with no value. Never
+  a zero, which is a number a threshold matches.
+- **Never repeat the last value you knew** once it is no longer current. A
+  rule reading a stale "the market is trending" goes on believing it.
+- A provider that is down says nothing at all, and Arvo drops its names from
+  the namespace rather than remembering them. A predicate over an absent
+  value is false, so a rule over a dead classifier's signal does not fire.
+
+Arvo polls rather than subscribing. A poll that fails is absence, which this
+protocol already has a word for — a broken stream would be a third state
+meaning the same thing.
 
 ## Serving more than one source
 

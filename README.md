@@ -41,7 +41,13 @@ This is the wide surface and the one to reach for first.
 **A provider.** A contribution that needs real logic runs as its own process,
 speaking gRPC over loopback, started and stopped by Arvo. The process
 boundary is the sandbox. [`PROTOCOL.md`](PROTOCOL.md) is how that process is
-started and how it is spoken to; [`proto/`](proto) is what it must serve.
+started and how it is spoken to; these are what it serves:
+
+| Proto | Service |
+| --- | --- |
+| [`plugin.proto`](proto/arvo/plugin/v1/plugin.proto) | `GetManifest` — what you are, and which of the below you serve |
+| [`source.proto`](proto/arvo/source/v1/source.proto) | a data source: bars, dividends, the venues it speaks for |
+| [`signal.proto`](proto/arvo/signal/v1/signal.proto) | named values that may be absent — a regime classifier, a score |
 
 What is deliberately not here is a third way. No third-party code runs inside
 Arvo's window, in any form, ever.
@@ -89,8 +95,13 @@ and `0.0` is a value a threshold matches.
 
 See [`PROTOCOL.md`](PROTOCOL.md). In short: Arvo starts your binary with an
 address to bind and a token to require, you print one line saying which port
-you took, and you serve [`arvo.source.v1.Source`](proto/arvo/source/v1/source.proto)
-until you are stopped. Any language with gRPC will do.
+you took, and you serve what your manifest claimed until you are stopped. Any
+language with gRPC will do.
+
+A signal provider is the shortest path in: `Describe` what you publish,
+answer `Latest` with what you currently think, and send nothing where you
+have nothing. Absence is a thing this protocol can say, and saying it is
+better than a number you do not mean.
 
 A provider declares itself in the manifest, with how to build it and what to
 run — and, for a machine with no toolchain, where to download it:

@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package arvo.plugin.v1;
+
+message Capability {
+  string name = 1;
+  string description = 2;
+}
+
+message Manifest {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  string api_version = 4;
+  repeated Capability capabilities = 5;
+}
+
+message GetManifestRequest {}
+
+service Plugin {
+  rpc GetManifest(GetManifestRequest) returns (Manifest);
+}

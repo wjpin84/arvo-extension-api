@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+// Named values a plugin process publishes (#160, #163).
+//
+// A signal is a name, an instant, and a value that may be absent. The
+// invariant is the whole reason this service is shaped the way it is:
+//
+//   A predicate over an absent value is false. Never zero, never true,
+//   never the last known value.
+//
+// So `value` is `optional` and absence is a thing this protocol can say. A
+// provider that is warming up, unsure, or has nothing to report sends the
+// point without a value rather than sending a number it does not mean. A
+// provider that is down says nothing at all, and a name nobody published
+// reads exactly like a value that is not there.
+//
+// This is the live feed. The history a study can read, and the flag that
+// decides whether a series may be traded on rather than only described, are
+// a stored series — see #164 and `arvo_data::signal::series`.
+package arvo.signal.v1;
+
+message Empty {}
+
+// What a provider publishes, said once so a reader knows what to expect
+// before anything has been published.
+message Declaration {
+  // The signal's name, in the open dotted namespace: `regime.trend`,
+  // `their-engine.price-behavior`. Letters, digits, `.`, `_` and `-`.
+  string name = 1;
+  // What it means, in one line, for a person choosing whether to read it.
+  string description = 2;
+  // Whether each value is computed from data available at that instant.
+  //
+  // A study may filter or gate on a causal signal and never on a
+  // descriptive one. Saying so is the provider's job: Arvo cannot tell by
+  // looking at the numbers, and a label computed over a whole window after
+  // the fact is look-ahead of the most flattering kind.
+  bool causal = 3;
+  // Why it is not causal, in the provider's own words. Shown wherever a use
+  // of it is refused, so the refusal says something a person can act on.
+  // Ignored when `causal` is true.
+  string because = 4;
+  // What computes it, by name and version: `price-behavior-v2.1-frozen`. A
+  // classifier that was retuned publishes a different one, and a series
+  // recorded from it is a different series.
+  string engine = 5;
+}
+
+message Declarations {
+  repeated Declaration signals = 1;
+}
+
+// One named value at one instant.
+message Value {
+  string name = 1;
+  // The instant this describes — not when it was computed. `YYYY-MM-DDTHH:MM:SS`
+  // or a date, as the rest of Arvo spells a bar's time.
+  string at = 2;
+  // Absent is absent. A provider with nothing to say about this instant
+  // sends the point without a value; it never sends zero to mean unknown,
+  // and never repeats the last one it knew.
+  optional double value = 3;
+}
+
+message Values {
+  repeated Value values = 1;
+}
+
+service Signals {
+  // What this provider publishes. A name that is not declared is still read
+  // if it is published, but a declaration is how a person finds out a signal
+  // exists before it has a value.
+  rpc Describe(Empty) returns (Declarations);
+
+  // What it says right now: one value per name it currently has an opinion
+  // about. Polled rather than streamed — a poll that fails is absence, which
+  // is a state this protocol already has, where a broken stream would be a
+  // third state meaning the same thing.
+  //
+  // Answer with what is current. Do not answer with the last value you knew
+  // if it is no longer current; send the point with no value, or omit the
+  // name, and let the reader see that nothing is known.
+  rpc Latest(Empty) returns (Values);
+}
