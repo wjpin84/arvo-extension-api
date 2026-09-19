@@ -131,6 +131,17 @@ downloads those and builds nothing. The `sha256` is required and checked
 before the file is written: this is an executable Arvo will run with the
 person's privileges.
 
+## Which way the calls go
+
+Everything here is **Arvo calling you**. Arvo starts your provider, hands it a
+token and a grant, and asks for bars or signals. Your provider authenticates
+with its vendor, not with Arvo.
+
+Calling Arvo is the other direction and a different contract: an agent over
+MCP, a script or a front end over the engine's own gRPC API, behind the
+engine's tokens. That API is not published here, and a provider never needs
+it. An extension that wants both is two things, and says so in its manifest.
+
 ## Versioning
 
 The proto changes additively, as proto3 requires: new fields, new messages,
