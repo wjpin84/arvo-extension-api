@@ -1,0 +1,36 @@
+# The provider contract is a published protocol: a change that an existing
+# plugin would not survive is refused here, not found by a plugin (#210).
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  protos:
+    name: buf lint and breaking
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ github.token }}
+      - run: buf lint
+      - name: buf breaking against the previous release
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match 'v*' --exclude "${GITHUB_REF_NAME}" 2>/dev/null || true)
+          if [ -z "$previous" ]; then
+            echo "no previous release tag; nothing to compare against"
+            exit 0
+          fi
+          echo "comparing against $previous"
+          buf breaking --against ".git#tag=$previous"
+      - name: the manifest schema is valid JSON
+        run: python3 -c "import json; json.load(open('manifest.schema.json'))"
